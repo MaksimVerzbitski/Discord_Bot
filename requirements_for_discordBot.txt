@@ -1,0 +1,6 @@
+discord.py
+apscheduler
+pytz
+yt-dlp
+python-dotenv
+watchdog
