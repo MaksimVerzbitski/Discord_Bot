@@ -4,3 +4,4 @@ pytz
 yt-dlp
 python-dotenv
 watchdog
+certifi

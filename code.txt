@@ -14,46 +14,41 @@ import yt_dlp as youtube_dl
 from dotenv import load_dotenv
 from discord import app_commands
 
-# Configure stdout for utf-8
 sys.stdout.reconfigure(encoding='utf-8')
 
-# Configure SSL context
 ssl._create_default_https_context = ssl._create_unverified_context
 ssl.create_default_context(cafile=certifi.where())
 
-# Configure logging
 logging.getLogger('apscheduler').setLevel(logging.DEBUG)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[logging.StreamHandler(sys.stdout)])
 logger = logging.getLogger()
 
-# Global variables
 song_queue = []
 current_song_index = 0
 music_dir = 'download/'
 
-# Load environment variables
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 USER_ID = os.getenv('USER_ID')
 USER_MAX_ID = os.getenv('USER_MAX_ID')
 
-# Define the MusicBot class
 class MusicBot(commands.Bot):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tree = app_commands.CommandTree(self)
+
     async def setup_hook(self):
         await self.tree.sync()
 
-# Define intents
 intents = discord.Intents.default()
 intents.messages = True
 intents.guilds = True
 intents.voice_states = True
 intents.message_content = True
 
-# Instantiate the bot
 bot = MusicBot(command_prefix='!', intents=intents)
 
-# Define the scheduler
 scheduler = AsyncIOScheduler(timezone="Europe/Tallinn")
 
 @bot.event
@@ -237,18 +232,17 @@ async def search(interaction: discord.Interaction, query: str):
         await interaction.response.send_message("Bot is not connected to a voice channel.")
         return
 
-    await interaction.response.defer()
     search_results = await YTDLSource.search(query, loop=bot.loop)
     if not search_results:
-        await interaction.followup.send("No results found.")
+        await interaction.response.send_message("No results found.")
         return
 
     if isinstance(search_results, str):
-        await interaction.followup.send(search_results)
+        await interaction.response.send_message(search_results)
         return
 
     results_message = "\n".join([f"{index + 1}. {title}" for index, (title, _) in enumerate(search_results[:10])])
-    message = await interaction.followup.send(f"Search results:\n{results_message}\n\nReact to choose a song or ❌ to cancel.", wait=True)
+    message = await interaction.response.send_message(f"Search results:\n{results_message}\n\nReact to choose a song or ❌ to cancel.")
 
     selection_emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟', '❌']
     for emoji in selection_emojis:
@@ -274,14 +268,6 @@ async def search(interaction: discord.Interaction, query: str):
     except asyncio.TimeoutError:
         await message.clear_reactions()
         await interaction.followup.send("No response in time.")
-        
-def format_duration(duration):
-    minutes, seconds = divmod(duration, 60)
-    hours, minutes = divmod(minutes, 60)
-    if hours > 0:
-        return f"{hours}:{minutes:02}:{seconds:02}"
-    else:
-        return f"{minutes}:{seconds:02}"
 
 async def play_next_song(ctx):
     global current_song_index
@@ -321,12 +307,12 @@ async def play_song(interaction, song_path):
     await interaction.response.send_message(f"Now playing: {os.path.basename(song_path)}")
 
 @bot.tree.command(name='reload', description='Reloads a module.')
-@commands.is_owner()
+@app_commands.checks.is_owner()
 @app_commands.describe(extension='The extension to reload')
 async def reload(interaction: discord.Interaction, extension: str):
     if extension:
         try:
-            await bot.reload_extension(f'cogs.{extension}')
+            bot.reload_extension(f'cogs.{extension}')
             await interaction.response.send_message(f'Reloaded `{extension}` cog.')
         except Exception as e:
             await interaction.response.send_message(f'Error reloading `{extension}`: {e}')
@@ -378,14 +364,8 @@ async def love(interaction: discord.Interaction):
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(f"Missing required argument: {error.param.name}")
-    elif isinstance(error, commands.CommandNotFound):
-        await ctx.send("Command not found.")
-    elif isinstance(error, commands.CommandInvokeError):
-        await ctx.send(f"Command invoke error: {error.original}")
-        logger.error(f"Command invoke error: {error.original}")
     else:
         await ctx.send("An error occurred while processing your command.")
-        logger.error(f"Unexpected error: {error}")
         raise error
 
 @bot.event
@@ -393,3 +373,4 @@ async def on_message(message):
     await bot.process_commands(message)
 
 bot.run(TOKEN)
+
